@@ -17,7 +17,7 @@ class LoginForm(FlaskForm):
         super(LoginForm, self).__init__(*args, **kwargs)
         self.user = None
 
-    def validate(self):
+    def validate(self, extra_validators=None):
         """Validate the form."""
         from Defines import ADMIN_DB
         initial_validation = super(LoginForm, self).validate()
@@ -53,6 +53,10 @@ class LoginForm(FlaskForm):
             r = requests.get(ADMIN_AUTH_URL, auth=(self.username.data, self.password.data), headers=headers).json()
         else:  # implement different external auth types
             r = {'id': None}
+        if not r.get('id'):
+            # it was not possible to authenticate for some reason
+            self.username.errors.append("Authentication failed, please contact administrators")
+            return False
         if not r['id'] == self.user.id:
             self.username.errors.append("Invalid password")
             return False

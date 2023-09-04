@@ -130,14 +130,18 @@ def get_datetime(t):
         return t
 
 
-def get_date(t):
+def get_date(t) -> datetime.date or any:
     """
     Transform string in datetime.date
     Gets first 10 positions in string ('YYYY-mm-dd')
+    It should work with any separator
     """
     try:
-        return datetime.strptime(t[:10], '%Y-%m-%d').date()
-    except (ValueError, TypeError) as e:
+        d = t[:10]
+        s = d[4]
+        f = f"%Y{s}%m{s}%d"
+        return datetime.strptime(d, f).date()
+    except (ValueError, TypeError, IndexError) as e:
         return t
 
 
@@ -245,8 +249,6 @@ def get_season_dates(ladder_id: int, season: int, date_from: datetime.date = Non
 
 ''' This are functions used by FSComp to calculate exact pressure altitude.
     I think it is an overkill. Also, I don't think Flight Levels are calculated on ISA values.'''
-
-
 def CalculateQnhAltitude(pressure: float, qnh: float):
     import math
 
@@ -263,8 +265,6 @@ def CalculatePressure(baroAltitude: float):
 
 
 ''' ISA pressure calculation'''
-
-
 def isa(alt: float):
     """return a 2-uplet (pressure, temperature) depending on provided altitude.
     Units are SI (m, PA, Kelvin)

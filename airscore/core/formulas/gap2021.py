@@ -10,7 +10,6 @@ Scoring Formula Script
 from formula import FormulaPreset, Preset
 from formulas.libs.gap import *
 from formulas.libs.leadcoeff import *
-from formulas import lclib
 
 ''' Formula Info'''
 # Formula Name: usually the filename in capital letters
@@ -21,7 +20,7 @@ formula_class = 'BOTH'
 ''' Default Formula presets
     pg_preset: PG default values, if formula applies for PG or mixed
     hg_preset: HG default values, if formula applies for HG or mixed
-    
+
     value:      default value of the parameter
     visible:    whether parameter is visible or not in frontend
     editable:   whether parameter is editable by user or not in frontend
@@ -30,19 +29,22 @@ formula_class = 'BOTH'
 pg_preset = FormulaPreset(
     # This part should not be edited
     formula_name=Preset(value=formula_name, visible=True, editable=True),
+
     # Editable part starts here
     # Distance Points: on, difficulty, off
     formula_distance=Preset(value='on', visible=True, editable=False),
     # Arrival Points: position, time, off
-    formula_arrival=Preset(value='off', visible=False, editable=False),
+    formula_arrival=Preset(value='off', visible=False),
     # Departure Points: on, leadout, off
     formula_departure=Preset(value='leadout', visible=True, editable=False),
-    # Lead Factor: factor for Leadou Points calculation formula
+    # Lead Factor: factor for Leadout Points calculation formula
     lead_factor=Preset(value=1.0, visible=True, editable=True),
-    # Squared Distances used for LeadCoeff: factor for Leadou Points calculation formula
-    # lead_squared_distance=Preset(value=True, visible=True, editable=True),
+    # Lead Coeff formula: classic, weighted, integrated
+    lc_formula=Preset(value='weighted', visible=False),
     # Time Points: on, off
     formula_time=Preset(value='on', visible=True, editable=False),
+    # SS distance calculation: launch_to_goal, launch_to_ess, sss_to_ess
+    ss_dist_calc=Preset(value='launch_to_ess', visible=False),
     # Arrival Altitude Bonus: Bonus points factor on ESS altitude
     arr_alt_bonus=Preset(value=0, visible=True, editable=True, comment='default: disabled'),
     # ESS Min Altitude
@@ -56,9 +58,9 @@ pg_preset = FormulaPreset(
     # Score back time for Stopped Tasks (minutes)
     score_back_time=Preset(value=300, visible=True, editable=True, comment='default: 5 mins'),
     # Jump the Gun: 1 or 0
-    max_JTG=Preset(value=0, visible=False, editable=False),
+    max_JTG=Preset(value=0, visible=False),
     # Penalty per Jump the Gun second
-    JTG_penalty_per_sec=Preset(value=None, visible=False, editable=False),
+    JTG_penalty_per_sec=Preset(value=None, visible=False),
     # Type of Total Validity: ftv, all
     overall_validity=Preset(value='ftv', visible=True, editable=True),
     # FTV Parameter
@@ -76,14 +78,15 @@ pg_preset = FormulaPreset(
     # Scoring Altitude Type: default is GPS for PG and QNH for HG
     scoring_altitude=Preset(value='GPS', visible=True, editable=True),
     # Decimals to be displayed in Task results: default is 0
-    task_result_decimal=Preset(value=1, visible=False, editable=False),
+    task_result_decimal=Preset(value=1, visible=False),
     # Decimals to be displayed in Comp results: default is 0
-    comp_result_decimal=Preset(value=0, visible=False, editable=False),
+    comp_result_decimal=Preset(value=0, visible=False),
 )
 
 hg_preset = FormulaPreset(
     # This part should not be edited
     formula_name=Preset(value=formula_name, visible=True, editable=True),
+
     # Editable part starts here
     # Distance Points: on, difficulty, off
     formula_distance=Preset(value='difficulty', visible=True, editable=True),
@@ -91,12 +94,14 @@ hg_preset = FormulaPreset(
     formula_arrival=Preset(value='position', visible=True, editable=True),
     # Departure Points: on, leadout, off
     formula_departure=Preset(value='leadout', visible=True, editable=True),
-    # Lead Factor: factor for Leadou Points calculation formula
+    # Lead Factor: factor for Leadout Points calculation formula
     lead_factor=Preset(value=1.0, visible=True, editable=True),
-    # Squared Distances used for LeadCoeff: factor for Leadou Points calculation formula
-    # lead_squared_distance=Preset(value=True, visible=True, editable=True),
+    # Lead Coeff formula: classic, weighted, integrated
+    lc_formula=Preset(value='classic', visible=False),
     # Time Points: on, off
     formula_time=Preset(value='on', visible=True, editable=True),
+    # SS distance calculation: launch_to_goal, launch_to_ess, sss_to_ess
+    ss_dist_calc=Preset(value='launch_to_ess', visible=False),
     # Arrival Altitude Bonus: Bonus points factor on ESS altitude
     arr_alt_bonus=Preset(value=0, visible=True, editable=True),
     # ESS Min Altitude
@@ -128,15 +133,13 @@ hg_preset = FormulaPreset(
     # Scoring Altitude Type: default is GPS for PG and QNH for HG
     scoring_altitude=Preset(value='QNH', visible=True, editable=True),
     # Decimals to be displayed in Task results: default is 0
-    task_result_decimal=Preset(value=1, visible=False, editable=False),
+    task_result_decimal=Preset(value=1, visible=False),
     # Decimals to be displayed in Comp results: default is 0
-    comp_result_decimal=Preset(value=0, visible=False, editable=False),
+    comp_result_decimal=Preset(value=0, visible=False),
 )
 
 
 ''' Function to calculate parameters (if needed)'''
-
-
 def calculate_parameters(args):
     """
     Args:
@@ -153,8 +156,6 @@ def calculate_parameters(args):
 
 
 ''' Scoring Functions'''
-
-
 def launch_validity(task):
     """
     9.1 Launch Validity
@@ -306,35 +307,13 @@ def pilot_speed(task, res):
         Tmin = task.fastest_in_goal / 3600 or 0
 
     Ptime = res.ss_time / 3600  # decimal hours
+    if Ptime < Tmin:
+        # in fastest_in_goal condition, pilot was faster than first in goal, if not checked it will cause exception
+        return 0
     SF = max(0, 1 - ((Ptime - Tmin) / sqrt(Tmin)) ** (5 / 6))
     Pspeed = Aspeed * SF - task.time_points_reduction if SF > 0 else 0
 
     return Pspeed
-
-
-def lead_coeff_function(lc, result, fix, next_fix):
-    """
-    GAP2020 leading Coefficient Calculation
-    11.3.1 Leading coefficient
-    HG: classic LC calculation
-    PG: weighted area calculation
-    """
-    if lc.comp_class == 'HG':
-        return lclib.classic.lc_calculation(lc, result, fix, next_fix)
-    else:
-        return lclib.weightedarea.lc_calculation(lc, result, fix, next_fix)
-
-
-def tot_lc_calc(res, t):
-    """Function to calculate final Leading Coefficient for pilots,
-    that needs to be done when all tracks have been scored
-    HG: classic LC calculation
-    PG: weighted area calculation
-    """
-    if t.comp_class == 'HG':
-        return lclib.classic.tot_lc_calculation(res, t)
-    else:
-        return lclib.weightedarea.tot_lc_calculation(res, t)
 
 
 def points_allocation(task):

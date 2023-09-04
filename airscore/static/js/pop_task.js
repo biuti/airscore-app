@@ -13,7 +13,7 @@ function populate_task(json){
     columns.push({data: 'name', title: 'Name'});
     columns.push({data: 'nat', title: 'NAT', name:'NAT', defaultContent: ''});
     columns.push({data: 'sex', title: 'Sex', defaultContent: '', visible: false});
-    columns.push({data: 'glider', title:' Glider', defaultContent: ''});
+    columns.push({data: 'glider', title:' Equip', defaultContent: ''});
     columns.push({data: 'glider_cert', title: 'Class', defaultContent: '', visible: false});
     columns.push({data: 'sponsor', title:' Sponsor', defaultContent: ''});
     //hide SS ES for Race
@@ -197,6 +197,13 @@ function populate_task(json){
                     $('#formula_right tbody').append('<tr><td>' + key + '</td><td>' + value + '</td></tr>');
                 }
                 count++;
+            });
+            // adding SS_distance info as it changes based on scoring system (2023)
+            $.each( json.info, function( key, value ) {
+                if ( key == 'SS_distance' )
+                {
+                    $('#taskinfo tbody').append('<tr><td>' + key + '</td><td>' + value + '</td></tr>');
+                }
             });
             $.each( json.stats, function( key, value ) {
                 $('#taskinfo tbody').append('<tr><td>' + key + '</td><td>' + value + '</td></tr>');

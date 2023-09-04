@@ -1,7 +1,7 @@
 {% extends "base.html"%}
 
 {% block page_title %}
-Competition Results - Country
+Competition Results - Team
 {% endblock %}
 
 {% block head %}
@@ -48,7 +48,7 @@ Competition Results - Country
 {% block js %}
 <script type='text/javascript' src='https://cdn.datatables.net/rowgroup/1.1.1/js/dataTables.rowGroup.min.js'></script>
 <script type='text/javascript' src='/static/js/enums.js'></script>
-<script type='text/javascript' src='/static/js/pop_country_overall.js'></script>
+<script type='text/javascript' src='/static/js/pop_team_overall.js'></script>
 <script src="{{ static_url_for('static', filename='js/class_filter.js') }}"></script>
-<script type='text/javascript'>populate_country_overall({{compid|tojson}})</script>
+<script type='text/javascript'>populate_team_overall({{compid|tojson}})</script>
 {% endblock %}

@@ -338,11 +338,14 @@ def competition(compid: int):
     all_tasks = []
     layer = {}
     country_scores = False
+    team_scores = False
     task_ids = []
     overall_available = False
     if result_file != 'error':
         if result_file['formula'].get('country_scoring') == 1:
             country_scores = True
+        if result_file['formula'].get('team_scoring') == 1:
+            team_scores = True
         overall_available = True
         for task in result_file['tasks']:
             task_ids.append(int(task['id']))
@@ -400,7 +403,7 @@ def competition(compid: int):
 
     return render_template('public/comp.html',
                            tasks=all_tasks, comp=comp, regids=regids, overall_available=overall_available,
-                           country_scores=country_scores)
+                           country_scores=country_scores, team_scores=team_scores)
 
 
 @blueprint.route('/ext_competition/<int:compid>')
@@ -580,6 +583,34 @@ def _get_task_country_result(taskid: int):
     return get_task_country_scoring(filename)
 
 
+@blueprint.route('/team_task/<int:taskid>')
+def team_task(taskid: int):
+    return render_template('public/team_task.html', taskid=taskid)
+
+
+@blueprint.route('/_get_task_team_result/<int:taskid>', methods=['GET'])
+def _get_task_team_result(taskid: int):
+    from task import get_task_json_filename
+    from result import get_task_team_scoring
+    filename = get_task_json_filename(taskid)
+    if not filename:
+        return render_template('404.html')
+    return get_task_team_scoring(filename)
+
+@blueprint.route('/team_overall/<int:compid>')
+def team_overall(compid: int):
+    return render_template('public/team_overall.html', compid=compid)
+
+
+@blueprint.route('/_get_comp_team_result/<int:compid>', methods=['GET'])
+def _get_comp_team_result(compid: int):
+    from compUtils import get_comp_json_filename
+    from result import get_comp_team_scoring
+    filename = get_comp_json_filename(compid)
+    if not filename:
+        return render_template('404.html')
+    return get_comp_team_scoring(filename)
+
 class SelectAdditionalTracks(FlaskForm):
     track_pilot_list = []
     tracks = SelectField('Add Tracks:', choices=track_pilot_list)
@@ -590,9 +621,7 @@ def map(paridtaskid):
     from airspaceUtils import read_airspace_map_file
     from mapUtils import create_trackpoints_layer
 
-    parid, taskid = paridtaskid.split("-")
-    parid = int(parid)
-    taskid = int(taskid)
+    parid, taskid = (int(i) for i in paridtaskid.split("-"))
 
     full_tracklog = bool(request.form.get('full') or request.args.get('full'))
     layer = {}
@@ -857,12 +886,12 @@ def _get_livetracking(taskid: int):
             else:
                 comment = ''
             '''delay'''
-            if not (el['landing_time'] or el['goal_time']) and el['last_time'] and rawtime - el['last_time'] > 120:  # 2 mins old
+            if not (el['landing_time'] or el['goal_time']) and el['last_time'] and rawtime - el['last_time'] > 300:  # 5 mins old
                 if rawtime - el['last_time'] > 600:  # 10 minutes old
                     status = f"[disconnected]"
                 else:
                     m, s = divmod(rawtime - el['last_time'], 60)
-                    status = f"[{m:02d}:{s:02d} old]"
+                    status += f" [{m:02d}:{s:02d} old]"
             time = sec_to_string(el['last_time'], offset) if el['last_time'] else ''
             p = dict(rank=idx, id=el['ID'], name=f"<span class='sex-{el['sex']}'>{el['name']}</span>", sex=el['sex'],
                      result=res, comment=comment, time=time, status=status)

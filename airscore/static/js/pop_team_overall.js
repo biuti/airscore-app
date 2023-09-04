@@ -1,9 +1,9 @@
-function populate_country_overall(compid){
+function populate_team_overall(compid){
     $('#comp_name').text('Loading Results ...');
 
     $.ajax({
         type: "GET",
-        url: '/_get_comp_country_result/'+compid,
+        url: '/_get_comp_team_result/'+compid,
         contentType:"application/json",
         dataType: "json",
         success: function (json) {
@@ -13,13 +13,13 @@ function populate_country_overall(compid){
             var columns = [];
             var idx = 0;
             // rankings
-            // console.log(json.rankings);
+            //console.log(json.rankings);
             // json.rankings.forEach( function(item, index) {
-            //     columns.push({data: 'rankings.'+item.rank_id.toString(), title: '#', name: item.rank_id.toString(), className: "text-right", defaultContent: '', visible: false});
+            //   columns.push({data: 'rankings.'+item.rank_id.toString(), title: '#', name: item.rank_id.toString(), className: "text-right", defaultContent: '', visible: false});
             // });
             columns.push({data: 'group', title:'Group', className: "text-right", defaultContent: '', visible: false});
             columns.push({data: 'score', title:'Total', className: "text-right", defaultContent: '', visible: false});
-            columns.push({data: 'nation_score', title:'Nation Total', className: "text-right", defaultContent: '', visible: false});
+            columns.push({data: 'team_score', title:'Team Total', className: "text-right", defaultContent: '', visible: false});
             columns.push({data: 'fai_id', title:'FAI', className: "text-right", defaultContent: '', visible: false});
             columns.push({data: 'civl_id', title:'CIVL', className: "text-right", defaultContent: '', visible: false});
             columns.push({data: 'name', title:'Name', render: function ( data, type, row ) { let span = '<span>'; if (row.sex == 'F'){span='<span class="sex-F">'}; return span + data + '</span>'}});
@@ -52,14 +52,14 @@ function populate_country_overall(compid){
 
                     // comp info
                     console.log(json.info);
-                    $('#comp_name').text(json.info.comp_name + "  - Nations");
+                    $('#comp_name').text(json.info.comp_name + "  - Teams");
                     $('#comp_date').text(json.info.date_from + ' - ' + json.info.date_to);
 
                     // some GAP parameters
                     $('#formula tbody').append(
                         "<tr><td>Director</td><td>" + json.info.MD_name + "</td></tr>" +
                         "<tr><td>Location</td><td>" + json.info.comp_site + "</td></tr>" +
-                        "<tr><td>Formula</td><td>" + json.formula.country_size + " scoring, max " +  json.formula.max_country_size + " pilots</td></tr>"
+                        "<tr><td>Formula</td><td>" + json.formula.team_size + " scoring, max " +  json.formula.max_team_size + " pilots</td></tr>"
                     );
 
                     $("#dhv option").remove(); // Remove all <option> child tags.

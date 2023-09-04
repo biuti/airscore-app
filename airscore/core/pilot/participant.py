@@ -10,6 +10,8 @@ Use: from participant import Participant
 Stuart Mackintosh Antonio Golfari - 2019
 """
 
+import datetime
+
 from calcUtils import get_date
 from db.conn import db_session
 from db.tables import TblParticipant as P, TblParticipantMeta as PA, TblCompAttribute as CA
@@ -141,7 +143,8 @@ class Participant(Pilot):
             pilot = Participant(name=abbreviate(name), civl_id=CIVLID)
             pilot.sex = 'F' if int(pil.get('female') if pil.get('female') else 0) > 0 else 'M'
             pilot.nat = pil.get('nat_code_3166_a3') or None
-        pilot.birthdate = get_date(pil.get('birthday') or None)
+        bd = get_date(pil.get('birthday') or None)
+        pilot.birthdate = None if not isinstance(bd, datetime.date) else bd
         pilot.ID = get_int(pil.get('id'))
         pilot.glider = abbreviate(pil.get('glider')) or None
         pilot.sponsor = abbreviate(pil.get('sponsor')) or None
@@ -206,7 +209,7 @@ def extract_participants_from_excel(comp_id: int, filename, certs: list, from_CI
         comp_id:    INT comp_id
         filename:   STR filename
         from_CIVL:  BOOL retrieve data from CIVL database using CIVLID
-    - read Airtribune XSLX file
+    - read Airtribune XLSX file
 
     excel file format:
     column name on row 1
@@ -264,7 +267,8 @@ def extract_participants_from_excel(comp_id: int, filename, certs: list, from_CI
             pil.attributes = []
         pil.ID = row[0]
         pil.comp_id = comp_id
-        pil.birthdate = None if row[4] is None else row[4].date()  # row[4] should be datetime
+        bd = get_date(row[4] or None)
+        pil.birthdate = None if not isinstance(bd, datetime.date) else bd
         pil.glider = abbreviate(row[5]) or None
         if classes_are_certs:
             pil.glider_cert = row[12]

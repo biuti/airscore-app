@@ -1,7 +1,7 @@
-function populate_country_task(task_id){
+function populate_team_task(task_id){
 $(document).ready(function() {
     $('#task_result').dataTable({
-        ajax: '/_get_task_country_result/'+task_id,
+        ajax: '/_get_task_team_result/'+task_id,
         paging: false,
         searching: true,
         saveState: true,
@@ -9,16 +9,17 @@ $(document).ready(function() {
         "dom": 'lrtip',
         columns: [
             {data: 'group', title:'group'},
-            {data: 'nation_score', title:'Nation Total'},
+            {data: 'team_score', title:'Team Total'},
             {data: 'fai_id', title:'FAI'},
             {data: 'civl_id', title:'CIVL'},
-            {data: 'glider', title:'Glider'},
+            {data: 'glider', title:'Equip'},
             {data: 'glider_cert', title:'EN'},
-            {data: 'name', title:'Name', "render": function ( data, type, row ) { let span = '<span>'; if (row.sex == 'F'){span='<span class="sex-F">'}; return span + data + '</span>'}},
+            {data: 'name', title:'Name'},
             {data: 'nat', title:'NAT'},
             {data: 'sex', title:'Sex'},
             {data: 'sponsor', title:'Sponsor'},
             {data: 'score', title:'Total', className: "text-right"}
+
 ],
 
     orderFixed: [[1, 'desc'],[10, 'desc']],
@@ -29,7 +30,7 @@ $(document).ready(function() {
     },
         "columnDefs": [
             {
-                "targets": [0, 1, 2, 3, 4, 5],
+                "targets": [ 0, 1, 2, 3, 4, 5],
                 "visible": false
             },
         ],
@@ -41,7 +42,7 @@ $(document).ready(function() {
 
             // task info
             $('#comp_name').text(json.info.comp_name)
-            $('#task_name').text(json.info.task_name + "  - Nations");
+            $('#task_name').text(json.info.task_name + " - Teams");
             $('#task_date').text(json.info.date);
 
             // some GAP parameters

@@ -13,7 +13,7 @@ from formulas.libs.leadcoeff import *
 
 ''' Formula Info'''
 # Formula Name: usually the filename in capital letters
-formula_name = 'GAP2020'
+formula_name = 'GAP2023'
 # Comp Class: PG, HG, BOTH
 formula_class = 'BOTH'
 
@@ -37,8 +37,8 @@ pg_preset = FormulaPreset(
     formula_arrival=Preset(value='off', visible=False),
     # Departure Points: on, leadout, off
     formula_departure=Preset(value='leadout', visible=True, editable=False),
-    # Lead Factor: factor for Leadout Points calculation formula
-    lead_factor=Preset(value=1.0, visible=False),
+    # Lead Factor: factor for Leadout Points calculation formula [0 - 0.5, default 0.26]
+    lead_factor=Preset(value=0.26, visible=True, editable=True),
     # Lead Coeff formula: classic, weighted, integrated
     lc_formula=Preset(value='weighted', visible=False),
     # Time Points: on, off
@@ -80,7 +80,7 @@ pg_preset = FormulaPreset(
     # Decimals to be displayed in Task results: default is 0
     task_result_decimal=Preset(value=1, visible=False),
     # Decimals to be displayed in Comp results: default is 0
-    comp_result_decimal=Preset(value=0, visible=False),
+    comp_result_decimal=Preset(value=1, visible=False),
 )
 
 hg_preset = FormulaPreset(
@@ -135,7 +135,7 @@ hg_preset = FormulaPreset(
     # Decimals to be displayed in Task results: default is 0
     task_result_decimal=Preset(value=1, visible=False),
     # Decimals to be displayed in Comp results: default is 0
-    comp_result_decimal=Preset(value=0, visible=False),
+    comp_result_decimal=Preset(value=1, visible=False),
 )
 
 
@@ -218,6 +218,10 @@ def points_weight(task):
     '''Goal Ratio'''
     goal_ratio = task.pilots_goal / task.pilots_launched
 
+    ''' Distance Weight'''
+    if task.formula.formula_distance != 'off':
+        task.dist_weight = 0.9 - 1.665 * goal_ratio + 1.713 * goal_ratio ** 2 - 0.587 * goal_ratio ** 3
+
     if comp_class == 'HG':
         """
         DistWeight:         0.9 - 1.665* goalRatio + 1.713*GolalRatio^2 - 0.587*goalRatio^3
@@ -225,9 +229,7 @@ def points_weight(task):
         ArrWeight:          (1 - DistWeight)/8
         TimeWeight:         1 − DistWeight − LeadWeight − ArrWeight
         """
-        ''' Distance Weight'''
-        if task.formula.formula_distance != 'off':
-            task.dist_weight = 0.9 - 1.665 * goal_ratio + 1.713 * goal_ratio ** 2 - 0.587 * goal_ratio ** 3
+
         ''' Arrival Weight'''
         if task.formula.formula_arrival != 'off':
             task.arr_weight = (1 - task.dist_weight) / 8
@@ -240,21 +242,26 @@ def points_weight(task):
     elif comp_class == 'PG':
         """
         DistWeight:
-            GoalRatio = 0:  DistanceWeight = 0.838
-            GoalRatio > 0:  DistanceWeight = 0.805 - 1.374*GoalRatio + 1.413*GoalRatio**2 - 0.484*GoalRatio**3
-        LeadWeight:         0.162
-        ArrWeight:          0
+            In paragliding, the parameter LeadingTimeRatio is set for each task, 
+            with a value between 0 and 50%, default is 26%. 
+            This parameter defines the ratio between leading and time weight. 
+            A value of 26% means that 26% of the weight not allocated to distance weight is allocated to leading weight, 
+            and the remaining 74% to time weight.
+
+        GoalRatio = 0: LeadingWeight = (1-DistanceWeight)
+        GoalRatio > 0: LeadingWeight = (1-DistanceWeight)*LeadingTimeRatio
+        ArrivalWeight=0
+
         TimeWeight:         1 − DistWeight − LeadWeight − ArrWeight
         """
-        ''' Distance Weight'''
-        if task.formula.formula_distance != 'off':
-            if goal_ratio == 0:
-                task.dist_weight = 0.838
-            else:
-                task.dist_weight = 0.805 - 1.374 * goal_ratio + 1.413 * goal_ratio ** 2 - 0.484 * goal_ratio ** 3
+
+        LeadingTimeRatio = task.formula.lead_factor
         ''' Departure Weight'''
         if task.formula.formula_departure != 'off':
-            task.dep_weight = 0.162
+            if goal_ratio == 0:
+                task.dep_weight = 1 - task.dist_weight
+            else:
+                task.dep_weight = (1 - task.dist_weight) * LeadingTimeRatio
 
     ''' Time weight'''
     if task.formula.formula_departure != 'off':

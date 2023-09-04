@@ -43,12 +43,14 @@ def list_formulas():
 
 def get_formula_lib_by_name(formula_name: str):
     """get formula library to use in scoring"""
-    formula_file = 'formulas.' + formula_name.lower()
     try:
+        formula_file = 'formulas.' + formula_name.lower()
         return importlib.import_module(formula_file, package=None)
+    except AttributeError as e:
+        print(f'Error: formula name is empty')
     except (ModuleNotFoundError, Exception):
-        print(f'formula file {formula_file} not found.')
-        return None
+        print(f'Error: formula file {formula_file} not found.')
+    return None
 
 
 @dataclass(frozen=True)
@@ -67,8 +69,9 @@ class FormulaPreset:
     formula_arrival: Preset
     formula_departure: Preset
     lead_factor: Preset
-    # lead_squared_distance: Preset
+    lc_formula: Preset
     formula_time: Preset
+    ss_dist_calc: Preset
     arr_alt_bonus: Preset
     arr_min_height: Preset
     arr_max_height: Preset
@@ -87,11 +90,11 @@ class FormulaPreset:
     task_result_decimal: Preset
     comp_result_decimal: Preset
 
-    def as_formula(self):
+    def as_formula(self) -> dict:
         """ gets presets' value"""
         return {x.name: getattr(self, x.name).value for x in fields(self)}
 
-    def has_calculated_values(self):
+    def has_calculated_values(self) -> bool:
         """ returns True if any value needs to be calculated using lib.calculate_parameters()"""
         return any(v.get('calculated') for k, v in asdict(self).items())
 
@@ -139,7 +142,8 @@ class Formula(object):
         country_scoring=False,
         country_size=0,
         max_country_size=0,
-        team_over=None
+        team_over=None,
+        **kwargs
     ):
 
         self.comp_id = comp_id
@@ -179,6 +183,9 @@ class Formula(object):
         self.country_size = country_size
         self.max_country_size = max_country_size
         self.team_over = team_over
+
+        for k,v in kwargs.items():
+            setattr(self, k, v)
 
     def __eq__(self, other):
         if not isinstance(other, Formula):
@@ -287,14 +294,17 @@ class Formula(object):
             q = db.query(F).get(comp_id)
             if q is not None:
                 q.populate(formula)
+        # get further values from preset
+        formula.fill_from_preset()
         return formula
 
     @classmethod
     def from_preset(cls, comp_class: str, formula_name: str):
         """ Create Formula obj. from preset values in formula script"""
         lib = get_formula_lib_by_name(formula_name)
-        preset = lib.pg_preset if comp_class in ('PG', 'mixed') else lib.hg_preset
-        return cls(**preset.as_formula())
+        if lib:
+            preset = lib.hg_preset if comp_class == 'HG' else lib.pg_preset
+            return cls(**preset.as_formula())
 
     @classmethod
     def from_fsdb(cls, fs_info, comp_class):
@@ -330,15 +340,23 @@ class Formula(object):
 
     def reset(self, comp_class: str, formula_name: str):
         lib = get_formula_lib_by_name(formula_name)
-        preset = lib.pg_preset if comp_class in ('PG', 'mixed') else lib.hg_preset
-        self.as_dict().update(preset.as_formula())
-        self.calculate_parameters(lib)
+        if lib:
+            preset = lib.hg_preset if comp_class == 'HG' else lib.pg_preset
+            self.as_dict().update(preset.as_formula())
+            self.calculate_parameters(lib)
 
     def calculate_parameters(self, lib=None):
         if not lib:
             lib = get_formula_lib_by_name(self.formula_name)
-        if 'calculate_parameters' in dir(lib):
+        if lib and 'calculate_parameters' in dir(lib):
             lib.calculate_parameters(self.as_dict())
+
+    def fill_from_preset(self):
+        preset = self.get_preset()
+        if preset:
+            for k, v in preset.as_formula().items():
+                if v is not None and (not hasattr(self, k) or getattr(self, k) is None):
+                    setattr(self, k, v)
 
     def to_db(self):
         """stores formula to TblForComp table in AirScore database"""
@@ -351,6 +369,12 @@ class Formula(object):
     def get_lib(self):
         """get formula library to use in scoring"""
         return get_formula_lib_by_name(self.formula_name)
+
+    def get_preset(self):
+        """get class formula preset from formula library"""
+        lib = get_formula_lib_by_name(self.formula_name)
+        if lib:
+            return lib.hg_preset if self.comp_class == 'HG' else lib.pg_preset
 
 
 class TaskFormula(Formula):
@@ -389,6 +413,8 @@ class TaskFormula(Formula):
             q = db.query(F).get(comp_id)
             if q is not None:
                 q.populate(formula)
+                # get further values from preset
+                formula.fill_from_preset()
         return formula
 
     @classmethod
@@ -404,6 +430,8 @@ class TaskFormula(Formula):
         from db.tables import TaskFormulaView as F
 
         formula = F.get_by_id(task_id).populate(TaskFormula())
+        # get further values from preset
+        formula.fill_from_preset()
         return formula
 
     def to_db(self):

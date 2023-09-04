@@ -24,6 +24,7 @@ from db.conn import db_session
 from db.tables import TblResultFile
 from sqlalchemy import and_
 from Defines import RESULTDIR
+from calcUtils import c_round
 from pathlib import Path
 
 
@@ -312,6 +313,11 @@ class TaskResult:
             ''' Stats Table'''
             stats = []
             right_align = [1]
+            # adding SS_distance info as it changes based on scoring system (2023)
+            key, value = next(((k, v) for k, v in res['info'].items() if k == 'SS_distance'), (None, None))
+            if key:
+                stats.append([key, value])
+
             for key, value in res['stats'].items():
                 stats.append([key, value])
             stats = dict(title='Stats:', css_class='simple', right_align=right_align, tbody=stats)
@@ -508,9 +514,8 @@ class CompResult(object):
                 row = [p['rankings'][k] if i == 0 else p[k] for i, k in enumerate(keys)]
                 for t in res['tasks']:
                     code = t['task_code']
-                    pre, score = p['results'][code]['pre'], p['results'][code]['score']
-                    result = score if score == pre else f"{score} <del>{pre}</del>"
-                    row.append(result)
+                    score = p['results'][code]['score']
+                    row.append(score)
                 tbody.append(row)
             results = dict(css_class='results', right_align=right_align, thead=thead, tbody=tbody)
             tables = [tasks, results]
@@ -534,7 +539,7 @@ def create_json_file(comp_id, code, elements, task_id=None, status=None, name_su
     :param
     name_suffix: optional name suffix if None a timestamp will be used.
         This is so we can overwrite comp results that are only used in front end to create competition
-         page not display results
+        page not display results
     """
     from datetime import datetime
     from time import time
@@ -827,7 +832,7 @@ def get_country_list(countries: set = None, iso: int = None) -> list:
 
 
 def pretty_format_results(content, timeoffset=0, td=0, cd=0):
-    from calcUtils import c_round, epoch_to_string, sec_to_duration, sec_to_string
+    from calcUtils import epoch_to_string, sec_to_duration, sec_to_string
 
     pure_time = ['ss_time', 'time_offset', 'fastest', 'fastest_in_goal']
     duration = ['tot_flight_time', 'SS_interval', 'max_JTG', 'validity_min_time', 'score_back_time']
@@ -1147,6 +1152,10 @@ def get_task_country_scoring(filename):
     if not formula['country_scoring']:
         print(f'Country Scoring is not available')
         return {'error': 'Country Scoring is not available'}
+
+    '''score decimals'''
+    td = 0 if 'task_result_decimal' not in formula.keys() else int(data['formula']['task_result_decimal'])
+
     countries = get_country_list(countries=set(map(lambda x: x['nat'], data['results'])))
     size = formula['team_size'] if 'country_size' not in formula.keys() else formula['country_size']
     for nat in countries:
@@ -1157,12 +1166,12 @@ def get_task_country_scoring(filename):
         )
         nat['score'] = sum([p['score'] for p in nat_pilots][:size])
         for rank, p in enumerate(nat_pilots):
-            p['group'] = f". {nat['name']} - {nat['score']:.0f} points"
+            p['group'] = f". {nat['name']} - {c_round(nat['score'], td)} points"
             p['nation_score'] = nat['score']
             if rank >= size:
-                p['score'] = f"<del>{p['score']:.2f}</del>"
+                p['score'] = f"<del>{c_round(p['score'], td)}</del>"
             else:
-                p['score'] = f"{p['score']:.2f}"
+                p['score'] = f"{c_round(p['score'], td)}"
         teams.append(nat)
         pilots.extend(nat_pilots)
     # get rank after sort
@@ -1183,19 +1192,24 @@ def get_comp_country_scoring(filename):
     if not formula['country_scoring']:
         print(f'Country Scoring is not available')
         return None
+
+    '''score decimals'''
+    td = 0 if 'task_result_decimal' not in formula.keys() else int(data['formula']['task_result_decimal'])
+    cd = 0 if 'comp_result_decimal' not in formula.keys() else int(data['formula']['comp_result_decimal'])
+
     '''get info: countries list, team size, task codes'''
     countries = get_country_list(countries=set(map(lambda x: x['nat'], data['results'])))
+    '''rankings'''
+    rankings = [dict(rank=1, counter=0, prev=None, **rank) for rank in data['rankings']
+                if rank['rank_type'] in ('overall', 'country')]
     size = formula['team_size'] if 'country_size' not in formula.keys() else formula['country_size']
-    tasks = [t['task_code'] for t in data['tasks']]
+    tasks = [t['task_code'] for t in data['tasks'] if not t['training']]
     teams = []
     pilots = []
     all_scores = []
-    all_possible_tasks = []
 
-    # setup the 20 task placeholders
-    for t in range(1, 21):
-        all_possible_tasks.append('T' + str(t))
-
+    rank = 0
+    prev = None
     for nat in countries:
         nat_pilots = [p for p in data['results'] if p['nat'] == nat['code'] and p['nat_team'] == 1]
         score = 0
@@ -1204,32 +1218,34 @@ def get_comp_country_scoring(filename):
             nat_pilots = sorted(nat_pilots, key=lambda k: k['results'][t]['pre'], reverse=True)
             '''adjust values'''
             for idx, p in enumerate(nat_pilots):
+                pre = c_round(p['results'][t]['pre'] or 0, td)
                 if idx < size:
-                    score += p['results'][t]['pre']
-                    p['results'][t]['score'] = p['results'][t]['pre']
+                    score += pre
+                    p['results'][t]['score'] = pre
                     p['results'][t]['perf'] = 1
                 else:
-                    p['results'][t]['score'] = f"<del>{int(p['results'][t]['pre'])}</del>"
+                    p['results'][t]['score'] = f"<del>{pre}</del>"
                     p['results'][t]['perf'] = 0
-        for t in list(set(all_possible_tasks) - set(tasks)):
-            for idx, p in enumerate(nat_pilots):
-                p['results'][t] = {'score': ''}
         '''final nation sorting'''
         for p in nat_pilots:
             p['score'] = sum(p['results'][t]['score'] for t in tasks if not isinstance(p['results'][t]['score'], str))
-            p['group'] = f". {nat['name']} - {score:.0f} points"
+            p['group'] = f". {nat['name']} - {c_round(score, cd)} points"
             p['nation_score'] = score
         nat_pilots = sorted(nat_pilots, key=lambda k: k['score'], reverse=True)
         pilots.extend(nat_pilots)
         nat['score'] = score
         teams.append(nat)
+
     # get rank after sort
     for t in teams:
         all_scores.append(t['score'])
     for row in pilots:
         row['group'] = str(sum(map(lambda x: x > row['nation_score'], all_scores)) + 1) + row['group']
 
-    return {'teams': teams, 'data': pilots, 'info': data['info'], 'formula': data['formula'], 'stats': data['stats']}
+    # '''manage rankings'''
+
+    return {'data': pilots, 'info': data['info'], 'tasks': data['tasks'],
+            'formula': data['formula'], 'stats': data['stats'], 'rankings': rankings}
 
 
 def get_task_team_scoring(filename):
@@ -1242,9 +1258,13 @@ def get_task_team_scoring(filename):
     pilots = []
     teams = []
     all_scores = []
-    if not formula['country_scoring']:
+    if not formula['team_scoring']:
         print(f'Team Scoring is not available')
         return None
+
+    '''score decimals'''
+    td = 0 if 'task_result_decimal' not in formula.keys() else int(data['formula']['task_result_decimal'])
+
     pilots_list = [p for p in data['results'] if not p['team'] in [None, '']]
     teams_list = set(map(lambda x: x['team'].strip().title(), pilots_list))
     size = formula['team_size']
@@ -1258,12 +1278,12 @@ def get_task_team_scoring(filename):
         team['pilots'] = team_pilots
         team['score'] = sum([p['score'] for p in team_pilots][:size])
         for rank, p in enumerate(team_pilots):
-            p['group'] = f". {team['name']} - {team['score']:.0f} points"
+            p['group'] = f". {team['name']} - {c_round(team['score'], td)} points"
             p['team_score'] = team['score']
             if rank >= size:
-                p['score'] = f"<del>{p['score']:.2f}</del>"
+                p['score'] = f"<del>{c_round(p['score'], td)}</del>"
             else:
-                p['score'] = f"{p['score']:.2f}"
+                p['score'] = f"{c_round(p['score'], td)}"
         teams.append(team)
         pilots.extend(team_pilots)
     # get rank after sort
@@ -1271,7 +1291,7 @@ def get_task_team_scoring(filename):
         all_scores.append(t['score'])
     for row in pilots:
         row['group'] = str(sum(map(lambda x: x > row['team_score'], all_scores)) + 1) + row['group']
-    return {'teams': teams, 'data': pilots, 'info': data['info'], 'formula': data['formula']}
+    return {'teams': teams, 'data': pilots, 'info': data['info'], 'formula': data['formula'], 'stats': data['stats']}
 
 
 def get_comp_team_scoring(filename):
@@ -1281,18 +1301,22 @@ def get_comp_team_scoring(filename):
     """
     data = open_json_file(filename)
     formula = data['formula']
-    if not formula['country_scoring']:
+    if not formula['team_scoring']:
         print(f'Team Scoring is not available')
         return None
     '''get info: teams list, team size, task codes'''
     pilots_list = [p for p in data['results'] if not p['team'] in [None, '']]
     teams_list = set(map(lambda x: x['team'].strip().title(), pilots_list))
     size = formula['team_size']
-    tasks = [t['task_code'] for t in data['tasks']]
+    tasks = [t['task_code'] for t in data['tasks'] if not t.get('training')]
     teams = []
     pilots = []
     all_scores = []
     all_possible_tasks = []
+
+    '''score decimals'''
+    td = 0 if 'task_result_decimal' not in formula.keys() else int(data['formula']['task_result_decimal'])
+    cd = 0 if 'comp_result_decimal' not in formula.keys() else int(data['formula']['comp_result_decimal'])
 
     # setup the 20 task placeholders
     for t in range(1, 21):
@@ -1320,7 +1344,7 @@ def get_comp_team_scoring(filename):
         '''final team sorting'''
         for p in team_pilots:
             p['score'] = sum(p['results'][t]['score'] for t in tasks if not isinstance(p['results'][t]['score'], str))
-            p['group'] = f". {team['name']} - {score:.0f} points"
+            p['group'] = f". {team['name']} - {c_round(score, cd)} points"
             p['team_score'] = score
         team_pilots = sorted(team_pilots, key=lambda k: k['score'], reverse=True)
         pilots.extend(team_pilots)
@@ -1332,4 +1356,4 @@ def get_comp_team_scoring(filename):
     for row in pilots:
         row['group'] = str(sum(map(lambda x: x > row['team_score'], all_scores)) + 1) + row['group']
 
-    return {'teams': teams, 'data': pilots, 'info': data['info'], 'formula': data['formula']}
+    return {'teams': teams, 'data': pilots, 'info': data['info'], 'tasks': data['tasks'], 'formula': data['formula'], 'stats': data['stats']}
